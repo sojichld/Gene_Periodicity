@@ -1,0 +1,212 @@
+---
+title: "Myc qPCR Time Series Analysis"
+output: html_notebook
+---
+
+1. Setting up the working directory
+
+```{r}
+setwd("C:/Users/sojic/Documents/TimeSeries")
+setwd("C:/Users/sojic/Documents/TimeSeries")
+getwd()
+```
+
+2. Loading the libraries:
+
+```{r}
+library("fuzzySim")
+library("ggplot2")
+library(ggsignif)
+library(MCMC.qpcr)
+```
+
+3. Loading the Ct data:
+
+```{r}
+data <- read.csv("wnt_Ct_data.csv")
+efficiency <- read.csv("Efficiency2.csv")
+```
+
+---
+
+Running `MCMC.qpcr` in the ***naive mode***
+
+1. Transforming the PCR data into count data
+
+```{r}
+data_count <- cq2counts(
+  data = data,
+  effic = efficiency,
+  genecols = c(3:12),
+  condcols = c(1:2)
+)
+```
+
+Specifying "Norm" as the global control:
+
+```{r}
+data_count$Time.Point <- relevel(data_count$Time.Point, ref = "Norm")
+```
+
+
+2. Fitting "naive" model:
+
+```{r}
+naive_model <- mcmc.qpcr(
+  data = data_count,
+  fixed = "Time.Point",
+  random = "sample"
+)
+```
+
+3. Plotting the data:
+
+```{r}
+naive_model_plots <- HPDsummary(model=naive_model, 
+                                data=data_count, 
+                                relative = TRUE, 
+                                x.order = c("Day 1", "Day 3", "Day 5", "Day 7", "Day 14", "Day 21"))
+```
+ Extracting the data (the upper triangle are log2 fold differences, the lower triangle are the p-values). NOTE: the p-values need to be adjusted for multiple comparisons:
+ 
+```{r}
+#naive_model_data_myc <- naive_model_plots$geneWise$wnt6
+naive_model_data_wnt6 <- naive_model_plots$geneWise$wnt6
+naive_model_data_wnt3 <- naive_model_plots$geneWise$wnt3
+naive_model_data_wnt9 <- naive_model_plots$geneWise$wnt9
+naive_model_data_wnt4 <- naive_model_plots$geneWise$wnt4
+naive_model_data_wnt5 <- naive_model_plots$geneWise$wnt5
+naive_model_data_wnt10 <- naive_model_plots$geneWise$wnt10
+naive_model_data_wnt16 <- naive_model_plots$geneWise$wnt16
+```
+
+---
+
+Running `MCMC.qpcr` in the ***informed mode***
+
+1. Using the same count-transformed data set `data_count` as above for the naive mode
+
+2. Fitting the model
+
+```{r}
+informed_model <- mcmc.qpcr(
+  data = data_count,
+  fixed = "Time.Point",
+  random = "sample",
+  controls = c("tuba", "tubb", "ubc"),
+  m.fix = 1.2,
+  normalize = TRUE
+)
+```
+
+3. Plotting:
+
+```{r}
+informed_model_plots <- HPDsummary(model=informed_model, 
+                                data=data_count, 
+                                relative = TRUE, 
+                                x.order = c("Day 1", "Day 3", "Day 5", "Day 7", "Day 14", "Day 21"))
+```
+
+Extracting the data:
+
+```{r}
+informed_model_data_wnt6 <- informed_model_plots$geneWise$wnt6
+informed_model_data_wnt3 <- informed_model_plots$geneWise$wnt3
+informed_model_data_wnt9 <- informed_model_plots$geneWise$wnt9
+informed_model_data_wnt4 <- informed_model_plots$geneWise$wnt4
+informed_model_data_wnt5 <- informed_model_plots$geneWise$wnt5b
+informed_model_data_wnt10 <- informed_model_plots$geneWise$wnt10
+informed_model_data_wnt16 <- informed_model_plots$geneWise$wnt16
+```
+
+---
+
+Running `MCMC.qpcr` in the ***"classic" mode***. The requirements are satisfied: (a) the majority of the Cq values are < 30 and none of them are higher than 32)
+
+1. Generating a log-transformed efficiency-corrected dataset:
+
+```{r}
+data_log_transformed <- cq2log(
+  data = data,
+  genecols = c(3:12),
+  condcols = c(1:2),
+  effic=efficiency
+)
+```
+
+2. Specifying "Norm" as the global control:
+
+```{r}
+data_log_transformed$Time.Point <- relevel(data_log_transformed$Time.Point, ref = "Norm") 
+```
+
+3. Fitting the "classic" model 
+
+```{r}
+classic_model <- mcmc.qpcr.classic(
+  data = data_log_transformed,
+  fixed = "Time.Point",
+  #random = "sample",
+  controls = c("tuba", "tubb", "ubc")
+)
+```
+
+3. Plotting:
+
+```{r}
+classic_model_plots <- HPDsummary(model=classic_model, 
+                                data=data_log_transformed, 
+                                relative = TRUE, 
+                                x.order = c("Day 1", "Day 3", "Day 5", "Day 7", "Day 14", "Day 21"),
+                                genes = c("wnt9","wnt6", "wnt3a", "wnt4", "wnt5b","wnt10b","wnt16")
+                                )
+```
+```{r}
+#classic_model_plots$ggPlot + annotate("text", x = "Day 14", y = 1.2, label = "*", size = 5)
+```
+Extracting the data:
+
+```{r}
+classic_model_data_wnt6 <- classic_model_plots$geneWise$wnt6
+classic_model_data_wnt3 <- classic_model_plots$geneWise$wnt3a
+classic_model_data_wnt9 <- classic_model_plots$geneWise$wnt9
+classic_model_data_wnt4 <- classic_model_plots$geneWise$wnt4
+classic_model_data_wnt5 <- classic_model_plots$geneWise$wnt5b
+classic_model_data_wnt10 <- classic_model_plots$geneWise$wnt10b
+classic_model_data_wnt16 <- classic_model_plots$geneWise$wnt16
+```
+
+---
+```{r}
+classic_model_data_wnt4
+```
+
+```{r}
+pvalues <- data.frame(var = c("Day 1","Day 3","Day 5","Day 7","Day 14","Day 21"), pval = c(0.23899535,0.029539668,0.056735071,0.262746598,0.002893704,0.195078582))
+padjusted <- FDR(pvalues = pvalues)
+padjustedkeep <- padjusted$select
+FDR(pvalues = pvalues)
+```
+
+
+---
+```{r}
+significant_timepoints <- c()
+for (i in rownames(padjustedkeep)){
+classic_model_plots$ggPlot <- classic_model_plots$ggPlot + annotate("text", x = i, y = 1.2, label = "*", size = 5) + xlab("\tTime Point") + ylab(bquote(~'\t' ~log^{"2"}  *' (Fold Change)')) + ggtitle("\tExpression of Myc throughout Regeneration") +  theme(axis.text.y = element_text(face="bold", size = 13)) +   theme(axis.title = element_text(face="bold", size = 13 )) + guides(fill="none") + theme(
+    # LABELS APPEARANCE
+    plot.title = element_text(size=14, face= "bold", colour= "black" ),
+    axis.title.x = element_text(size=14, face="bold", colour = "black"),    
+    axis.title.y = element_text(size=14, face="bold", colour = "black"),    
+    axis.text.x = element_text(size=12, face="bold", colour = "black" ), axis.text.y = element_text(size=13, face="bold", colour = "black"))}
+classic_model_plots$ggPlot
+```
+
+Saving the work:
+
+```{r}
+save.image(file = "Workspace.Rdata")
+```
+
+
